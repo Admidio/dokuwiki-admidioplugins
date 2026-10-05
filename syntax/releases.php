@@ -122,6 +122,7 @@ class syntax_plugin_admidioplugins_releases extends SyntaxPlugin
         $editData = [
             'rid' => $release['rid'],
             'version' => $version,
+            'download' => (string)$release['download'],
             'release_status' => $status,
             'release_date' => (string)$release['release_date'],
             'requires_admidio' => (string)$release['requires_admidio'],
@@ -209,12 +210,11 @@ class syntax_plugin_admidioplugins_releases extends SyntaxPlugin
             . $field(
                 'download',
                 '<input type="text" name="download" autocomplete="off" />',
-                $label('hint_download'),
-                'only-add'
+                $label('hint_download')
             )
-            . '<div class="only-add"><button type="button" class="button admidioplugins-inspect">'
+            . '<div><button type="button" class="button admidioplugins-inspect">'
             . hsc($label('btn_inspect')) . '</button> '
-            . '<button type="button" class="button admidioplugins-cancel">' . hsc($label('btn_cancel')) . '</button></div>'
+            . '<button type="button" class="button admidioplugins-cancel only-add">' . hsc($label('btn_cancel')) . '</button></div>'
             . '<div class="admidioplugins-derived" hidden></div>'
             . '<div class="admidioplugins-details" hidden>'
             . $field('release_status', '<select name="release_status">' . $statusOptions . '</select>')

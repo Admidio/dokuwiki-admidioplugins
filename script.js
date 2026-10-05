@@ -36,7 +36,10 @@ jQuery(function () {
         const $download = $form.find('[name=download]');
         let mode = null;   // 'add' or 'update'
         let rid = 0;
+        const $inspect = $form.find('.admidioplugins-inspect');
         let inspected = ''; // the download value the derived data belongs to
+        let original = '';  // when editing: the address stored with the release
+        let reread = false; // when editing: the archive was read again and replaces the stored data
 
         $box.find('.admidioplugins-controls, .admidioplugins-release-actions').prop('hidden', false);
 
@@ -77,6 +80,9 @@ jQuery(function () {
             $details.prop('hidden', mode === 'add');
             showMessage('');
             inspected = '';
+            original = '';
+            reread = false;
+            $inspect.text(text(mode === 'add' ? 'btn_inspect' : 'btn_reread'));
             $form.insertAfter($anchor).prop('hidden', false);
         };
 
@@ -107,14 +113,23 @@ jQuery(function () {
             $download.trigger('focus');
         });
 
-        $form.find('.admidioplugins-inspect').on('click', function () {
+        $inspect.on('click', function () {
             const download = String($download.val()).trim();
             showMessage(text('checking'));
-            $details.prop('hidden', true);
+            if (mode === 'add') {
+                $details.prop('hidden', true);
+            }
             $derived.prop('hidden', true);
-            call('inspect', {download: download}).done(function (response) {
+            const data = mode === 'update' ? {download: download, rid: rid} : {download: download};
+            call('inspect', data).done(function (response) {
                 inspected = download;
+                reread = true;
                 showDerived(response.archive);
+                if (mode === 'update') {
+                    // The restrictions of the archive are the new starting point; they stay editable.
+                    $form.find('[name=requires_admidio]').val(response.archive.requires_admidio);
+                    $form.find('[name=requires_php]').val(response.archive.requires_php);
+                }
                 $details.prop('hidden', false);
                 showMessage('');
             }).fail(failed);
@@ -122,9 +137,15 @@ jQuery(function () {
 
         // Changing the address invalidates what was read from the previous one.
         $download.on('input', function () {
-            if (mode === 'add' && String($download.val()).trim() !== inspected) {
+            if (String($download.val()).trim() === inspected) {
+                return;
+            }
+            $derived.prop('hidden', true);
+            if (mode === 'add') {
                 $details.prop('hidden', true);
-                $derived.prop('hidden', true);
+            } else {
+                // A new address only takes effect once the archive behind it has been read.
+                reread = false;
             }
         });
 
@@ -134,6 +155,8 @@ jQuery(function () {
             const release = $item.data('release');
             openForm('update', $item.children().last(), text('edit_title', release.version));
             rid = release.rid;
+            original = String(release.download || '');
+            $download.val(original);
             FIELDS.forEach(function (name) {
                 $form.find('[name=' + name + ']').val(release[name] || '');
             });
@@ -167,6 +190,15 @@ jQuery(function () {
                 data.download = inspected;
             } else {
                 data.rid = rid;
+                const download = String($download.val()).trim();
+                if (download !== original && !reread) {
+                    showMessage(text('reread_needed'), true);
+                    return;
+                }
+                if (reread) {
+                    data.reread = 1;
+                    data.download = download;
+                }
             }
             showMessage(text('saving'));
             call(mode, data).done(function () {

@@ -97,7 +97,12 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
         global $INPUT;
 
         $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid));
-        $this->assertNewVersion($helper, $pid, $info['version']);
+        if ($INPUT->int('rid') > 0) {
+            // Re-reading the archive of a published release: it has to be that release's version.
+            $this->assertSameVersion($helper, $pid, $INPUT->int('rid'), $info['version']);
+        } else {
+            $this->assertNewVersion($helper, $pid, $info['version']);
+        }
 
         return ['archive' => $info];
     }
@@ -129,6 +134,10 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
     /**
      * Change what may change after publishing: status, date, notes and - to narrow them when an
      * incompatibility turns up later - the version restrictions.
+     *
+     * With "reread" the archive is fetched again, from the submitted address (which may be a new
+     * one), and its address, checksum and size replace the stored ones. The version must stay the
+     * same: a different version is a different release.
      */
     private function update(helper_plugin_admidioplugins $helper, string $pid): array
     {
@@ -149,6 +158,14 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
                 throw new RuntimeException(sprintf($this->getLang('err_bad_constraint'), $constraint));
             }
             $values[$key] = $constraint;
+        }
+
+        if ($INPUT->bool('reread')) {
+            $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid));
+            $this->assertSameVersion($helper, $pid, $release['rid'], $info['version']);
+            $values['download'] = $info['download'];
+            $values['sha256'] = $info['sha256'];
+            $values['size'] = (string)$info['size'];
         }
 
         $helper->saveRelease($pid, $values, $release['rid']);
@@ -190,6 +207,17 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
             if (version_compare((string)$release['version'], $version, '==')) {
                 throw new RuntimeException(sprintf($this->getLang('err_duplicate'), $version));
             }
+        }
+    }
+
+    private function assertSameVersion(helper_plugin_admidioplugins $helper, string $pid, int $rid, string $version): void
+    {
+        $release = $helper->findRelease($pid, $rid);
+        if ($release === null) {
+            throw new RuntimeException($this->getLang('err_no_release'));
+        }
+        if (!version_compare((string)$release['version'], $version, '==')) {
+            throw new RuntimeException(sprintf($this->getLang('err_version_changed'), $version, $release['version']));
         }
     }
 
