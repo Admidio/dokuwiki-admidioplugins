@@ -87,7 +87,9 @@
     }
 }
 
-.admidioplugins-releases {
+/* .dokuwiki raises the specificity above template list rules, e.g. bootstrap3's
+   ".dokuwiki .fix-media-list-overlap li { margin-bottom: 20px }" on admidio.org. */
+.dokuwiki .admidioplugins-releases {
     margin: 0 0 1.4em 0;
 
     ul.admidioplugins-release-list {
