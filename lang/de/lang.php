@@ -69,6 +69,7 @@ $lang['summary_deleted'] = 'Version %s gelöscht';
 
 // Errors
 $lang['err_not_ready'] = 'Das struct-Plugin oder die Admidio-Plugin-Schemas sind nicht eingerichtet.';
+$lang['err_option'] = 'Unbekannte oder ungültige Option der Versionsliste: "%s".';
 $lang['err_method'] = 'Diese Anfrage muss mit POST gesendet werden.';
 $lang['err_login'] = 'Bitte melde dich an.';
 $lang['err_token'] = 'Das Sicherheitstoken ist ungültig. Bitte lade die Seite neu.';

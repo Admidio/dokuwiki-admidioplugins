@@ -69,6 +69,7 @@ $lang['summary_deleted'] = 'Release %s deleted';
 
 // Errors
 $lang['err_not_ready'] = 'The struct plugin or the Admidio plugin schemas are not set up.';
+$lang['err_option'] = 'Unknown or invalid option of the release list: "%s".';
 $lang['err_method'] = 'This request must be sent with POST.';
 $lang['err_login'] = 'Please log in.';
 $lang['err_token'] = 'The security token is invalid. Please reload the page.';

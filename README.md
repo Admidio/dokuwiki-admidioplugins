@@ -39,6 +39,32 @@ A plugin page consists of free wiki text plus
 Do **not** use a `---- struct serial ----` block for the releases: its editor would bypass the
 checks of the release form, and the guard refuses it for this schema anyway.
 
+### Selecting releases
+
+Options after `releases` (and after an explicit page, if any) restrict the list, so that a page
+can show the current release in a box of its own and the others below it:
+
+    <WRAP download 60%>
+    {{admidioplugins>releases latest}}
+    </WRAP>
+
+    Older versions:
+    {{admidioplugins>releases older}}
+
+| Option | Effect |
+|---|---|
+| `admidio=5.0[,4.3…]` | only releases whose Admidio requirement accepts one of these versions (as the catalogue's `admidio` parameter) |
+| `status=stable[,rc…]` | only releases with one of these statuses |
+| `latest` | of the remaining releases, only the newest stable one |
+| `latest=5.1,4.3` | the newest stable release for each of these Admidio versions, e.g. one box listing the current release for Admidio 5 and for Admidio 4 |
+| `older`, `older=5.1,4.3` | all remaining releases except those `latest` with the same versions would list |
+
+With `status=`, `latest` picks among those statuses instead of stable releases only
+(`latest status=beta`: the newest beta). Withdrawn releases are never "latest". A list whose
+options match no release renders nothing; an unknown option renders an error message instead of
+the list. Edit controls work in every list; *Add release* is offered once, below the last list of
+the page.
+
 ### Pages in other languages
 
 Plugin data and releases live on one page per plugin, in the canonical language namespace

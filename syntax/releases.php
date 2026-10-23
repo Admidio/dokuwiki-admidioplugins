@@ -5,6 +5,17 @@
  *
  *   {{admidioplugins>releases}}
  *   {{admidioplugins>releases en:plugins:someplugin}}
+ *   {{admidioplugins>releases latest}}
+ *   {{admidioplugins>releases older admidio=4.0 status=stable,rc}}
+ *
+ * Options select which releases are listed, so that a page can put the current release in a
+ * <WRAP download> box and the others below it:
+ *   admidio=<v>[,<v>...]  only releases whose Admidio requirement accepts one of these versions
+ *   status=<s>[,<s>...]   only releases with one of these statuses
+ *   latest[=<v>,...]      of those, only the newest stable release - or, with versions, the newest
+ *                         stable release for each of these Admidio versions
+ *   older[=<v>,...]       of those, all except what "latest" with the same versions would list
+ * With status=, "latest" picks among the given statuses instead of stable only.
  *
  * Lists the releases of the plugin described on this page - or, on a page without plugin data of
  * its own (de:plugins:x), those of its counterpart in the canonical language (en:plugins:x), or
@@ -49,7 +60,37 @@ class syntax_plugin_admidioplugins_releases extends SyntaxPlugin
     /** @inheritDoc */
     public function handle($match, $state, $pos, Doku_Handler $handler)
     {
-        return ['page' => trim(substr($match, strlen('{{admidioplugins>releases'), -2))];
+        $data = ['page' => '', 'admidio' => [], 'status' => [], 'select' => '', 'for' => [], 'error' => ''];
+
+        $words = preg_split('/\s+/', trim(substr($match, strlen('{{admidioplugins>releases'), -2)), -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($words as $word) {
+            [$name, $value] = array_pad(explode('=', $word, 2), 2, null);
+            $list = $value === null ? [] : array_values(array_filter(array_map('trim', explode(',', $value)), 'strlen'));
+            $name = strtolower($name);
+
+            if (($name === 'admidio' || $name === 'latest' || $name === 'older')
+                && $value !== null
+                && ($list === [] || array_filter($list, fn($v) => !helper_plugin_admidioplugins::isValidVersion($v)))) {
+                $data['error'] = $word;
+            } elseif ($name === 'admidio' && $value !== null) {
+                $data['admidio'] = $list;
+            } elseif ($name === 'status' && $value !== null) {
+                $list = array_map([helper_plugin_admidioplugins::class, 'normalizeStatus'], $list);
+                if ($list === [] || array_diff($list, helper_plugin_admidioplugins::RELEASE_STATUSES)) {
+                    $data['error'] = $word;
+                }
+                $data['status'] = $list;
+            } elseif ($name === 'latest' || $name === 'older') {
+                $data['select'] = $name;
+                $data['for'] = $list;
+            } elseif ($value === null && $data['page'] === '') {
+                $data['page'] = $word;
+            } else {
+                $data['error'] = $word;
+            }
+        }
+
+        return $data;
     }
 
     /** @inheritDoc */
@@ -80,19 +121,29 @@ class syntax_plugin_admidioplugins_releases extends SyntaxPlugin
             return true;
         }
 
-        $renderer->doc .= $this->renderReleases($helper, $source, (string)$ID);
+        if (($data['error'] ?? '') !== '') {
+            $renderer->doc .= '<div class="error">'
+                . hsc(sprintf($this->getLang('err_option'), $data['error'])) . '</div>';
+            return true;
+        }
+
+        $renderer->doc .= $this->renderReleases($helper, $source, (string)$ID, $data);
         return true;
     }
 
-    private function renderReleases(helper_plugin_admidioplugins $helper, string $pid, string $current): string
+    private function renderReleases(helper_plugin_admidioplugins $helper, string $pid, string $current, array $options): string
     {
         $language = $helper->displayLanguage($current);
-        $releases = $helper->getReleases($pid);
+        $all = $helper->getReleases($pid);
+        $releases = $this->selectReleases($all, $options);
 
         $html = '<div class="admidioplugins-releases" data-pid="' . hsc($pid) . '">';
 
         if ($releases === []) {
-            $html .= '<p class="admidioplugins-empty">' . hsc($helper->langFor($language, 'releases_none')) . '</p>';
+            // A selection that matches nothing stays empty: it usually sits in a box of its own.
+            if ($all === []) {
+                $html .= '<p class="admidioplugins-empty">' . hsc($helper->langFor($language, 'releases_none')) . '</p>';
+            }
         } else {
             $html .= '<ul class="admidioplugins-release-list">';
             foreach ($releases as $release) {
@@ -108,6 +159,58 @@ class syntax_plugin_admidioplugins_releases extends SyntaxPlugin
         $html .= $this->renderForm($helper, $language);
 
         return $html . '</div>';
+    }
+
+    /**
+     * The releases the options of one list select, newest first like $releases.
+     */
+    private function selectReleases(array $releases, array $options): array
+    {
+        $statusOf = fn(array $release): string
+            => helper_plugin_admidioplugins::normalizeStatus((string)$release['release_status']);
+
+        $releases = array_values(array_filter($releases, function (array $release) use ($options, $statusOf): bool {
+            if (($options['status'] ?? []) !== [] && !in_array($statusOf($release), $options['status'], true)) {
+                return false;
+            }
+            return $this->acceptsAny($release, $options['admidio'] ?? []);
+        }));
+
+        $select = $options['select'] ?? '';
+        if ($select === '') {
+            return $releases;
+        }
+
+        // "latest" candidates: stable releases, or those of the requested statuses (never withdrawn).
+        $candidates = array_filter($releases, function (array $release) use ($options, $statusOf): bool {
+            $status = $statusOf($release);
+            return $status !== 'withdrawn' && (($options['status'] ?? []) !== [] || $status === 'stable');
+        });
+        $latest = [];
+        foreach (($options['for'] ?? []) === [] ? [null] : $options['for'] as $version) {
+            foreach ($candidates as $release) {
+                if ($version === null || $this->acceptsAny($release, [$version])) {
+                    $latest[$release['rid']] = true;
+                    break; // newest first
+                }
+            }
+        }
+
+        return array_values(array_filter($releases, fn(array $release): bool
+            => isset($latest[$release['rid']]) === ($select === 'latest')));
+    }
+
+    /**
+     * Whether the Admidio requirement of a release accepts one of the versions (all, if none given).
+     */
+    private function acceptsAny(array $release, array $versions): bool
+    {
+        foreach ($versions as $version) {
+            if (helper_plugin_admidioplugins::versionMatches($version, (string)$release['requires_admidio'])) {
+                return true;
+            }
+        }
+        return $versions === [];
     }
 
     private function renderRelease(helper_plugin_admidioplugins $helper, array $release, string $language): string

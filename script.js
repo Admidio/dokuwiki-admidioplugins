@@ -41,7 +41,13 @@ jQuery(function () {
         let original = '';  // when editing: the address stored with the release
         let reread = false; // when editing: the archive was read again and replaces the stored data
 
-        $box.find('.admidioplugins-controls, .admidioplugins-release-actions').prop('hidden', false);
+        $box.find('.admidioplugins-release-actions').prop('hidden', false);
+        // A page may split the releases into several lists (latest in a box, the older ones
+        // below); "Add release" is offered once, below the last of them.
+        const $lists = jQuery('.admidioplugins-releases').filter(function () {
+            return String(jQuery(this).data('pid')) === pid;
+        });
+        $box.find('.admidioplugins-controls').prop('hidden', !$box.is($lists.last()));
 
         const call = function (op, data) {
             return jQuery.ajax({
