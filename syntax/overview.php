@@ -93,7 +93,7 @@ class syntax_plugin_admidioplugins_overview extends SyntaxPlugin
                 continue;
             }
 
-            $html .= '<h3>' . hsc($helper->langFor($language, $headingKey)) . '</h3><ul>';
+            $html .= '<h5>' . hsc($helper->langFor($language, $headingKey)) . '</h5><ul>';
             foreach ($groups[$group] as $entry) {
                 $name = trim((string)($entry['data']['name'] ?? '')) ?: (string)($entry['data']['plugin_id'] ?? $entry['pid']);
                 $html .= '<li class="level1"><div class="li">'
