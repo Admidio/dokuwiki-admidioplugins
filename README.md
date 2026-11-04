@@ -10,6 +10,9 @@ into the plugin directory of [Admidio](https://www.admidio.org/):
 - **Release list** – `{{admidioplugins>releases}}` lists the releases of the page: version, status,
   comment and date in the head line, the requirements and the notes below it, in the language of the
   page. Users who may edit the page get an *Add release* button and edit/delete controls.
+- **Plugin lists** – `{{admidioplugins>overview}}` is a searchable table of all plugins, `{{admidioplugins>sidebar}}`
+  a compact headed link list for the sidebar; both group the plugins by the Admidio version
+  (6.0, 5.0, 4.x and older) their newest release requires.
 - **Release form** – an author enters only the address of the ZIP archive (or the media ID of an
   archive uploaded to the wiki). Plugin ID, version, Admidio/PHP requirements, size and SHA-256
   are read from the archive and its `plugin.json`, with the same packaging rules Admidio's

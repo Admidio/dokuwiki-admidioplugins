@@ -4,6 +4,7 @@
  * DokuWiki Plugin admidioplugins (Syntax Component: plugin overview)
  *
  *   {{admidioplugins>overview}}
+ *   {{admidioplugins>sidebar}}
  *
  * A searchable overview of every plugin, grouped into three tables by the Admidio version its
  * newest release requires: Admidio 6, Admidio 5, and Admidio 4 or older (see
@@ -11,6 +12,9 @@
  * classified, and which plugins are left out). A plain text box above the tables filters their
  * rows as the visitor types - a small jQuery handler in script.js, not a new library, because the
  * plugin list is short enough that a live substring filter is all it needs.
+ *
+ * "sidebar" renders the same grouping as plain headed link lists (name only, no filter box or
+ * descriptions), for the wiki's sidebar page.
  *
  * @license GPL-2.0-or-later
  */
@@ -40,13 +44,13 @@ class syntax_plugin_admidioplugins_overview extends SyntaxPlugin
     /** @inheritDoc */
     public function connectTo($mode)
     {
-        $this->Lexer->addSpecialPattern('\{\{admidioplugins>overview\}\}', $mode, 'plugin_admidioplugins_overview');
+        $this->Lexer->addSpecialPattern('\{\{admidioplugins>(?:overview|sidebar)\}\}', $mode, 'plugin_admidioplugins_overview');
     }
 
     /** @inheritDoc */
     public function handle($match, $state, $pos, Doku_Handler $handler)
     {
-        return [];
+        return ['mode' => str_contains($match, '>sidebar') ? 'sidebar' : 'overview'];
     }
 
     /** @inheritDoc */
@@ -72,8 +76,34 @@ class syntax_plugin_admidioplugins_overview extends SyntaxPlugin
             return true;
         }
 
-        $renderer->doc .= $this->renderOverview($helper, $helper->displayLanguage((string)$ID));
+        $language = $helper->displayLanguage((string)$ID);
+        $renderer->doc .= ($data['mode'] ?? '') === 'sidebar'
+            ? $this->renderSidebar($helper, $language)
+            : $this->renderOverview($helper, $language);
         return true;
+    }
+
+    private function renderSidebar(helper_plugin_admidioplugins $helper, string $language): string
+    {
+        $groups = $helper->getPluginsByAdmidioVersion();
+
+        $html = '<div class="admidioplugins-sidebar">';
+        foreach (['admidio6' => 'sidebar_admidio6', 'admidio5' => 'sidebar_admidio5', 'admidio4' => 'sidebar_admidio4'] as $group => $headingKey) {
+            if ($groups[$group] === []) {
+                continue;
+            }
+
+            $html .= '<h3>' . hsc($helper->langFor($language, $headingKey)) . '</h3><ul>';
+            foreach ($groups[$group] as $entry) {
+                $name = trim((string)($entry['data']['name'] ?? '')) ?: (string)($entry['data']['plugin_id'] ?? $entry['pid']);
+                $html .= '<li class="level1"><div class="li">'
+                    . html_wikilink(':' . $this->pageInLanguage($entry['pid'], $language), $name)
+                    . '</div></li>';
+            }
+            $html .= '</ul>';
+        }
+
+        return $html . '</div>';
     }
 
     private function renderOverview(helper_plugin_admidioplugins $helper, string $language): string

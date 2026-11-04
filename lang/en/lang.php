@@ -28,6 +28,9 @@ $lang['overview_filter'] = 'Search plugins …';
 $lang['overview_admidio6'] = 'Plugins compatible with Admidio 6';
 $lang['overview_admidio5'] = 'Plugins compatible with Admidio 5';
 $lang['overview_admidio4'] = 'Plugins only compatible with Admidio 4 or older';
+$lang['sidebar_admidio6'] = 'Plugins for Admidio 6';
+$lang['sidebar_admidio5'] = 'Plugins for Admidio 5';
+$lang['sidebar_admidio4'] = 'Plugins for Admidio 4 and older';
 
 // Release list
 $lang['releases_none'] = 'No releases have been published yet.';
