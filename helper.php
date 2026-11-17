@@ -44,6 +44,18 @@ class helper_plugin_admidioplugins extends Plugin
     public const ENTRY_FILE = 'plugin.php';
 
     /**
+     * Archive entries Admidio's installer skips (PluginPackage::SKIPPED): a path with one of these
+     * names as any segment does not count for the layout - in particular the __MACOSX folder the
+     * ZIP tool of macOS puts next to the plugin folder.
+     */
+    public const SKIPPED = ['__MACOSX', '.git', '.github', '.svn', '.hg',
+        'tests', 'phpunit.xml', 'phpunit.xml.dist', '.phpunit.result.cache',
+        '.DS_Store', 'Thumbs.db', '.gitignore', '.gitattributes'];
+
+    /** The first Admidio version with the plugin manager. A legacy release must not accept it. */
+    public const PLUGIN_MANAGER_VERSION = '6.0.0';
+
+    /**
      * Native display name per language code, for the "Supported languages" fact of the info box.
      * The catalogue itself keeps the raw code (languages/*.xml naming) - this is display only.
      * Taken from Admidio's own languages/languages.php, the native half of its "English - Native"
@@ -728,15 +740,24 @@ class helper_plugin_admidioplugins extends Plugin
      * Fetch a plugin archive and read what it is.
      *
      * The archive has to satisfy the same packaging rule Admidio's installer enforces: exactly one
-     * top-level directory named after the plugin ID, containing plugin.json and plugin.php.
+     * top-level directory, containing plugin.json and plugin.php. The plugin ID is the "id" of
+     * plugin.json or, if it states none, the name of that directory - so the source archive GitHub
+     * generates for a release tag (repository-1.2.0/) is accepted when its manifest names the ID.
      *
-     * @param string $download   Web address or media ID of the archive.
-     * @param string $expectedId The plugin ID the archive must contain; '' accepts any valid ID.
+     * An archive without plugin.json is a plugin for Admidio before the plugin manager. With
+     * $allowLegacy it is accepted all the same, as long as it is a readable ZIP with one top-level
+     * directory; the result then has legacy = true, no version, no requirements and no checksum,
+     * because nothing in such an archive states them and it must never reach the catalogue.
+     *
+     * @param string $download    Web address or media ID of the archive.
+     * @param string $expectedId  The plugin ID the archive must contain; '' accepts any valid ID.
+     * @param bool   $allowLegacy Whether an archive without plugin.json is accepted.
      * @return array{id:string,version:string,name:string,author:string,license:string,icon:string,
-     *               requires_admidio:string,requires_php:string,sha256:string,size:int,download:string}
+     *               requires_admidio:string,requires_php:string,sha256:string,size:int,download:string,
+     *               legacy:bool}
      * @throws RuntimeException with a message meant for the plugin author.
      */
-    public function inspectArchive(string $download, string $expectedId = ''): array
+    public function inspectArchive(string $download, string $expectedId = '', bool $allowLegacy = false): array
     {
         $download = trim($download);
         if ($download === '') {
@@ -766,12 +787,46 @@ class helper_plugin_admidioplugins extends Plugin
                 throw new RuntimeException(sprintf($this->getLang('err_too_large'), $this->maxArchiveBytes()));
             }
 
-            $id = $this->checkLayout($file);
+            $layout = $this->checkLayout($file);
+            $root = $layout['root'];
+
+            if (!$layout['manifest']) {
+                if (!$allowLegacy) {
+                    throw new RuntimeException(sprintf($this->getLang('err_layout_missing'), self::MANIFEST_FILE));
+                }
+                return [
+                    'id' => $expectedId,
+                    'version' => '',
+                    'name' => '',
+                    'author' => '',
+                    'license' => '',
+                    'icon' => '',
+                    'requires_admidio' => '',
+                    'requires_php' => '',
+                    'sha256' => '',
+                    'size' => $size,
+                    'download' => $download,
+                    'legacy' => true,
+                ];
+            }
+            if (!$layout['entry']) {
+                throw new RuntimeException(sprintf($this->getLang('err_layout_missing'), self::ENTRY_FILE));
+            }
+
+            $manifest = $this->readManifest($file, $root);
+
+            $id = $root;
+            if (array_key_exists('id', $manifest)) {
+                $id = is_string($manifest['id']) ? $manifest['id'] : '';
+                if (!self::isValidId($id)) {
+                    throw new RuntimeException(sprintf($this->getLang('err_manifest_id'), $id));
+                }
+            } elseif (!self::isValidId($root)) {
+                throw new RuntimeException(sprintf($this->getLang('err_layout_id'), $root));
+            }
             if ($expectedId !== '' && $id !== $expectedId) {
                 throw new RuntimeException(sprintf($this->getLang('err_wrong_id'), $id, $expectedId));
             }
-
-            $manifest = $this->readManifest($file, $id);
 
             $version = is_string($manifest['version'] ?? null) ? trim($manifest['version']) : '';
             if ($version === '' || !self::isValidVersion($version)) {
@@ -799,6 +854,7 @@ class helper_plugin_admidioplugins extends Plugin
                 'sha256' => hash_file('sha256', $file),
                 'size' => $size,
                 'download' => $download,
+                'legacy' => false,
             ];
         } finally {
             if ($temporary !== null) {
@@ -847,9 +903,12 @@ class helper_plugin_admidioplugins extends Plugin
     }
 
     /**
-     * Check the packaging rule and return the plugin ID (the top-level directory).
+     * Check the packaging rule: safe names, the size limits and one top-level directory.
+     *
+     * @return array{root:string,manifest:bool,entry:bool} The top-level directory, and whether it
+     *         holds plugin.json and plugin.php.
      */
-    private function checkLayout(string $file): string
+    private function checkLayout(string $file): array
     {
         try {
             $zip = new Zip();
@@ -884,6 +943,9 @@ class helper_plugin_admidioplugins extends Plugin
             }
 
             $segments = explode('/', trim($name, '/'));
+            if (array_intersect($segments, self::SKIPPED) !== []) {
+                continue;
+            }
             if (count($segments) < 2 && !$entry->getIsdir()) {
                 throw new RuntimeException($this->getLang('err_layout_root'));
             }
@@ -897,23 +959,17 @@ class helper_plugin_admidioplugins extends Plugin
             $hasEntry = $hasEntry || $name === $root . '/' . self::ENTRY_FILE;
         }
 
-        if ($root === null || !self::isValidId($root)) {
-            throw new RuntimeException(sprintf($this->getLang('err_layout_id'), (string)$root));
-        }
-        if (!$hasManifest) {
-            throw new RuntimeException(sprintf($this->getLang('err_layout_missing'), self::MANIFEST_FILE));
-        }
-        if (!$hasEntry) {
-            throw new RuntimeException(sprintf($this->getLang('err_layout_missing'), self::ENTRY_FILE));
+        if ($root === null) {
+            throw new RuntimeException($this->getLang('err_layout_root'));
         }
 
-        return $root;
+        return ['root' => $root, 'manifest' => $hasManifest, 'entry' => $hasEntry];
     }
 
     /**
-     * Read and decode <id>/plugin.json from the archive.
+     * Read and decode <root>/plugin.json from the archive.
      */
-    private function readManifest(string $file, string $id): array
+    private function readManifest(string $file, string $root): array
     {
         $directory = io_mktmpdir();
         if (!$directory) {
@@ -923,9 +979,9 @@ class helper_plugin_admidioplugins extends Plugin
         try {
             $zip = new Zip();
             $zip->open($file);
-            $zip->extract($directory, '', '', '/^' . preg_quote($id . '/' . self::MANIFEST_FILE, '/') . '$/');
+            $zip->extract($directory, '', '', '/^' . preg_quote($root . '/' . self::MANIFEST_FILE, '/') . '$/');
 
-            $raw = @file_get_contents($directory . '/' . $id . '/' . self::MANIFEST_FILE);
+            $raw = @file_get_contents($directory . '/' . $root . '/' . self::MANIFEST_FILE);
             $manifest = is_string($raw) ? json_decode($raw, true) : null;
             if (!is_array($manifest)) {
                 throw new RuntimeException($this->getLang('err_manifest'));

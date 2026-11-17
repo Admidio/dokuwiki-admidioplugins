@@ -81,7 +81,8 @@ jQuery(function () {
             mode = newMode;
             $form.get(0).reset();
             $form.find('legend').text(legend);
-            $form.toggleClass('is-add', mode === 'add').toggleClass('is-update', mode === 'update');
+            $form.toggleClass('is-add', mode === 'add').toggleClass('is-update', mode === 'update')
+                .removeClass('is-legacy');
             $derived.prop('hidden', true).empty();
             $details.prop('hidden', mode === 'add');
             showMessage('');
@@ -93,7 +94,11 @@ jQuery(function () {
         };
 
         const showDerived = function (archive) {
-            const rows = [
+            // An archive without plugin.json states nothing but its size: version and requirements
+            // are entered by hand, and the release stays on the page, out of the catalogue.
+            const rows = archive.legacy ? [
+                ['derived_size', archive.size + ' B']
+            ] : [
                 ['derived_id', archive.id],
                 ['derived_version', archive.version],
                 ['derived_requires_admidio', archive.requires_admidio || text('any')],
@@ -105,7 +110,12 @@ jQuery(function () {
             rows.forEach(function (row) {
                 $list.append(jQuery('<dt></dt>').text(text(row[0])), jQuery('<dd></dd>').text(row[1]));
             });
-            $derived.empty().append($list).prop('hidden', false);
+            $derived.empty();
+            if (archive.legacy) {
+                $derived.append(jQuery('<p class="admidioplugins-legacy"></p>').text(text('derived_legacy')));
+            }
+            $derived.append($list).prop('hidden', false);
+            $form.toggleClass('is-legacy', !!archive.legacy);
         };
 
         // Add a release
@@ -131,7 +141,7 @@ jQuery(function () {
                 inspected = download;
                 reread = true;
                 showDerived(response.archive);
-                if (mode === 'update') {
+                if (mode === 'update' && !response.archive.legacy) {
                     // The restrictions of the archive are the new starting point; they stay editable.
                     $form.find('[name=requires_admidio]').val(response.archive.requires_admidio);
                     $form.find('[name=requires_php]').val(response.archive.requires_php);
@@ -194,6 +204,9 @@ jQuery(function () {
             data.hide_requires = $form.find('[name=hide_requires]').prop('checked') ? 1 : 0;
             if (mode === 'add') {
                 data.download = inspected;
+                if ($form.hasClass('is-legacy')) {
+                    data.version = String($form.find('[name=version]').val()).trim();
+                }
             } else {
                 data.rid = rid;
                 const download = String($download.val()).trim();

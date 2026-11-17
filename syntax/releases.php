@@ -320,13 +320,20 @@ class syntax_plugin_admidioplugins_releases extends SyntaxPlugin
             . '<button type="button" class="button admidioplugins-cancel only-add">' . hsc($label('btn_cancel')) . '</button></div>'
             . '<div class="admidioplugins-derived" hidden></div>'
             . '<div class="admidioplugins-details" hidden>'
+            . $field('version', '<input type="text" name="version" />', $label('hint_version'), 'only-legacy')
             . $field('release_status', '<select name="release_status">' . $statusOptions . '</select>')
             . $field('release_date', '<input type="date" name="release_date" />')
             . $field('comment', '<input type="text" name="comment" />', $label('hint_comment'))
             . $field('comment_de', '<input type="text" name="comment_de" />')
             . $field('notes', '<textarea name="notes" rows="3"></textarea>', $label('hint_notes'))
             . $field('notes_de', '<textarea name="notes_de" rows="3"></textarea>')
-            . $field('requires_admidio', '<input type="text" name="requires_admidio" />', $label('hint_requires'), 'only-edit')
+            // Its hint depends on whether the archive has a plugin.json to take the value from.
+            . '<label class="admidioplugins-field only-edit">'
+            . '<span class="label">' . hsc($label('field_requires_admidio')) . '</span>'
+            . '<input type="text" name="requires_admidio" />'
+            . '<span class="hint not-legacy">' . hsc($label('hint_requires')) . '</span>'
+            . '<span class="hint only-legacy">' . hsc($label('hint_requires_legacy')) . '</span>'
+            . '</label>'
             . $field('requires_php', '<input type="text" name="requires_php" />', '', 'only-edit')
             . '<label class="admidioplugins-field admidioplugins-checkbox">'
             . '<input type="checkbox" name="hide_requires" value="1" /> '

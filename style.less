@@ -220,8 +220,13 @@
         }
     }
 
-    &.is-add .only-edit,
-    &.is-update .only-add {
+    // An archive without plugin.json (a plugin for Admidio before the plugin manager) states no
+    // version and no requirements, so adding it asks for them.
+    &.is-add:not(.is-legacy) .only-edit,
+    &.is-update .only-add,
+    &:not(.is-legacy) .only-legacy,
+    &.is-update .only-legacy,
+    &.is-legacy .not-legacy {
         display: none;
     }
 

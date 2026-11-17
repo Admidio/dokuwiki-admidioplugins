@@ -16,7 +16,14 @@ into the plugin directory of [Admidio](https://www.admidio.org/):
 - **Release form** – an author enters only the address of the ZIP archive (or the media ID of an
   archive uploaded to the wiki). Plugin ID, version, Admidio/PHP requirements, size and SHA-256
   are read from the archive and its `plugin.json`, with the same packaging rules Admidio's
-  installer enforces.
+  installer enforces: one top-level folder holding `plugin.json` and `plugin.php`, named after the
+  plugin ID unless `plugin.json` states the ID in `"id"` (which makes the source archive of a GitHub
+  release tag, `repository-1.2.0/`, acceptable). Entries Admidio skips, such as the `__MACOSX`
+  folder of the macOS ZIP tool, do not count.
+
+  An archive **without** `plugin.json` is a plugin for Admidio before 6.0. The form then asks for
+  the version and the Admidio versions it runs on (which must exclude 6.0); the release is listed on
+  the page but gets no checksum, so it never reaches the catalogue.
 - **Struct editor guard** – closes a gap in struct's row editor (see *Security*).
 
 ## Requirements
@@ -110,7 +117,7 @@ renders nothing on the canonical page itself, which shows the box already.
 
 | Column | Set by |
 |---|---|
-| `version`, `requires_admidio`, `requires_php`, `download`, `sha256`, `size` | read from the archive when the release is added |
+| `version`, `requires_admidio`, `requires_php`, `download`, `sha256`, `size` | read from the archive when the release is added; for an archive without `plugin.json`, version and requirements are entered by the author and `sha256` stays empty |
 | `release_status` | author: `stable`, `rc`, `beta`, `alpha`, `withdrawn` |
 | `release_date` | author |
 | `comment`, `comment_de` | author: a few words shown next to the version, e.g. "security fix" |

@@ -9,6 +9,11 @@
  * page. The plugin ID, version, requirements, size and checksum of a release are never taken from
  * the request: they are read from the archive itself, on "add" again even if "inspect" already did.
  *
+ * The one exception is an archive without plugin.json - a plugin for Admidio before the plugin
+ * manager. Nothing in it states a version or requirements, so the author enters them; such a
+ * release gets no checksum, which keeps it on the page and out of the catalogue, and its Admidio
+ * requirement has to exclude the versions with the plugin manager.
+ *
  * @license GPL-2.0-or-later
  */
 
@@ -96,11 +101,12 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
     {
         global $INPUT;
 
-        $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid));
+        $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid), true);
         if ($INPUT->int('rid') > 0) {
             // Re-reading the archive of a published release: it has to be that release's version.
-            $this->assertSameVersion($helper, $pid, $INPUT->int('rid'), $info['version']);
-        } else {
+            $this->assertSameRelease($helper, $pid, $INPUT->int('rid'), $info);
+        } elseif (!$info['legacy']) {
+            // The version of a legacy archive is only known once the author has entered it.
             $this->assertNewVersion($helper, $pid, $info['version']);
         }
 
@@ -114,7 +120,10 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
     {
         global $INPUT;
 
-        $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid));
+        $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid), true);
+        if ($info['legacy']) {
+            $info = $this->legacyFields($info);
+        }
         $this->assertNewVersion($helper, $pid, $info['version']);
 
         $rid = $helper->saveRelease($pid, $this->authorFields() + [
@@ -161,8 +170,8 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
         }
 
         if ($INPUT->bool('reread')) {
-            $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid));
-            $this->assertSameVersion($helper, $pid, $release['rid'], $info['version']);
+            $info = $helper->inspectArchive($INPUT->str('download'), $this->pluginId($helper, $pid), true);
+            $this->assertSameRelease($helper, $pid, $release['rid'], $info);
             $values['download'] = $info['download'];
             $values['sha256'] = $info['sha256'];
             $values['size'] = (string)$info['size'];
@@ -210,15 +219,57 @@ class action_plugin_admidioplugins_ajax extends ActionPlugin
         }
     }
 
-    private function assertSameVersion(helper_plugin_admidioplugins $helper, string $pid, int $rid, string $version): void
+    /**
+     * A re-read archive has to be the release it replaces: the same version, or - for a legacy
+     * release, whose archive states no version - again an archive without plugin.json. A release
+     * the catalogue offers cannot be turned into a legacy one.
+     */
+    private function assertSameRelease(helper_plugin_admidioplugins $helper, string $pid, int $rid, array $info): void
     {
         $release = $helper->findRelease($pid, $rid);
         if ($release === null) {
             throw new RuntimeException($this->getLang('err_no_release'));
         }
-        if (!version_compare((string)$release['version'], $version, '==')) {
-            throw new RuntimeException(sprintf($this->getLang('err_version_changed'), $version, $release['version']));
+        if ($info['legacy']) {
+            if (trim((string)$release['sha256']) !== '') {
+                throw new RuntimeException($this->getLang('err_legacy_reread'));
+            }
+            return;
         }
+        if (!version_compare((string)$release['version'], $info['version'], '==')) {
+            throw new RuntimeException(sprintf($this->getLang('err_version_changed'), $info['version'], $release['version']));
+        }
+    }
+
+    /**
+     * Version and requirements of a legacy release, as the author entered them.
+     */
+    private function legacyFields(array $info): array
+    {
+        global $INPUT;
+
+        $version = trim($INPUT->str('version'));
+        if ($version === '' || !helper_plugin_admidioplugins::isValidVersion($version)) {
+            throw new RuntimeException(sprintf($this->getLang('err_legacy_version'), $version));
+        }
+
+        $requiresAdmidio = trim($INPUT->str('requires_admidio'));
+        $requiresPhp = trim($INPUT->str('requires_php'));
+        foreach ([$requiresAdmidio, $requiresPhp] as $constraint) {
+            if (!helper_plugin_admidioplugins::isReadableConstraint($constraint)) {
+                throw new RuntimeException(sprintf($this->getLang('err_bad_constraint'), $constraint));
+            }
+        }
+        // An empty requirement accepts every version, the ones with the plugin manager included.
+        if ($requiresAdmidio === ''
+            || helper_plugin_admidioplugins::versionMatches(helper_plugin_admidioplugins::PLUGIN_MANAGER_VERSION, $requiresAdmidio)) {
+            throw new RuntimeException($this->getLang('err_legacy_requires'));
+        }
+
+        $info['version'] = $version;
+        $info['requires_admidio'] = $requiresAdmidio;
+        $info['requires_php'] = $requiresPhp;
+        return $info;
     }
 
     private function status(string $status): string
