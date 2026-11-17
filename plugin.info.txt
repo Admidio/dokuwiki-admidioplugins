@@ -1,7 +1,7 @@
 base   admidioplugins
 author Reinhold Kainhofer / ChatGPT / Claude
 email  reinhold@kainhofer.com
-date   2026-09-18
+date   2026-11-17
 name   Admidio Plugin Repository API
 desc   Admidio plugin directory: struct-based JSON catalogue, plugin info box, release list and release form.
-url    https://admidio.org/dokuwiki
+url    https://github.com/Admidio/dokuwiki-admidioplugins
